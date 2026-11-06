@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L3-04 — BME280 Weather Station</title>
+<style>
+:root{
+  --bg:#FAFBFC;--surface:#FFF;--surface-2:#F1F5F9;--border:#E2E8F0;--text:#0F172A;--text-muted:#64748B;
+  --info:#2563EB;--info-bg:#EFF6FF;--info-border:#BFDBFE;
+  --success:#059669;--success-bg:#ECFDF5;--success-border:#A7F3D0;
+  --danger:#DC2626;--danger-bg:#FEF2F2;--danger-border:#FECACA;
+  --warning:#D97706;--warning-bg:#FFFBEB;--warning-border:#FDE68A;
+  --advanced:#7C3AED;--advanced-bg:#F5F3FF;--advanced-border:#DDD6FE;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:64px;
+  --r-sm:8px;--r-md:14px;--r-lg:22px;--r-full:999px;
+  --shadow-sm:0 1px 3px rgba(15,23,42,.05);--shadow-md:0 4px 14px rgba(15,23,42,.08);--shadow-lg:0 14px 40px rgba(15,23,42,.12);
+  --font-body:'Cairo','Segoe UI',system-ui,sans-serif;
+  --font-code:'JetBrains Mono','Fira Code','Courier New',monospace;
+}
+[data-theme="dark"]{
+  --bg:#0A0E1A;--surface:#1E293B;--surface-2:#0F172A;--border:#334155;--text:#E2E8F0;--text-muted:#94A3B8;
+  --info-bg:#1E3A8A;--success-bg:#064E3B;--danger-bg:#7F1D1D;--warning-bg:#78350F;--advanced-bg:#4C1D95;
+  --shadow-md:0 4px 14px rgba(0,0,0,.4);--shadow-lg:0 14px 40px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);line-height:1.75;transition:background .3s,color .3s;overflow-x:hidden}
+code,pre,.mono{font-family:var(--font-code);font-variant-ligatures:none}
+
+.progress-dots{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:100;background:var(--surface);padding:10px 14px;border-radius:var(--r-full);box-shadow:var(--shadow-md);border:1px solid var(--border)}
+.dot{width:9px;height:9px;border-radius:var(--r-full);background:var(--border);cursor:pointer;transition:all .3s;border:none;padding:0}
+.dot:hover{transform:scale(1.3)}
+.dot.visited{background:var(--info);opacity:.5}
+.dot.active{background:var(--advanced);width:26px;box-shadow:0 0 0 3px var(--advanced-bg)}
+.theme-toggle{position:fixed;top:16px;left:16px;z-index:100;width:44px;height:44px;border-radius:var(--r-full);background:var(--surface);border:1px solid var(--border);cursor:pointer;box-shadow:var(--shadow-md);font-size:20px;display:grid;place-items:center;transition:transform .2s}
+.theme-toggle:hover{transform:scale(1.1) rotate(15deg)}
+
+.slide{display:none;min-height:100vh;padding:var(--s8) var(--s6) 100px;max-width:1200px;margin:0 auto;animation:fadeUp .5s ease;flex-direction:column;justify-content:center}
+.slide.active{display:flex}
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
+.slide-header{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s6);flex-wrap:wrap}
+.slide-badge{font-size:.75rem;font-weight:800;letter-spacing:2px;background:var(--advanced-bg);color:var(--advanced);padding:6px 14px;border-radius:var(--r-full);border:1px solid var(--advanced-border)}
+.slide-number{font-size:.8rem;color:var(--text-muted);font-weight:700;margin-right:auto;font-family:var(--font-code)}
+.slide h2{font-size:clamp(1.5rem,3.5vw,2.4rem);font-weight:900;line-height:1.25;margin-bottom:var(--s3)}
+.slide h3{font-size:1.2rem;font-weight:800;margin-bottom:var(--s3)}
+.muted{color:var(--text-muted);font-size:.95rem}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s5);box-shadow:var(--shadow-sm);transition:transform .25s,box-shadow .25s}
+.card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
+
+.box{padding:var(--s4) var(--s5);border-radius:var(--r-md);border-right:4px solid;font-size:.95rem}
+.box-info{background:var(--info-bg);border-color:var(--info)}
+.box-success{background:var(--success-bg);border-color:var(--success)}
+.box-danger{background:var(--danger-bg);border-color:var(--danger)}
+.box-warning{background:var(--warning-bg);border-color:var(--warning)}
+.box-advanced{background:var(--advanced-bg);border-color:var(--advanced)}
+.box b{font-weight:800}
+
+.grid{display:grid;gap:var(--s4)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+.predict{background:linear-gradient(135deg,var(--advanced-bg),var(--info-bg));border:2px dashed var(--advanced);border-radius:var(--r-lg);padding:var(--s6) var(--s5);text-align:center;margin:var(--s4) 0}
+.predict .predict-icon{font-size:2.5rem;margin-bottom:var(--s3)}
+.predict h3{color:var(--advanced);margin-bottom:var(--s3);font-size:1.2rem}
+.predict-input{width:100%;max-width:520px;margin:var(--s4) auto 0;padding:var(--s3) var(--s4);border:2px solid var(--border);border-radius:var(--r-md);font-family:var(--font-body);font-size:1rem;background:var(--surface);color:var(--text);resize:vertical;min-height:70px;display:block}
+.predict-input:focus{outline:none;border-color:var(--advanced)}
+.reveal-btn{margin-top:var(--s3);padding:var(--s3) var(--s5);background:var(--advanced);color:#fff;border:none;border-radius:var(--r-full);font-family:var(--font-body);font-weight:800;cursor:pointer;font-size:.95rem;transition:transform .2s}
+.reveal-btn:hover{transform:scale(1.05)}
+.reveal-content{display:none;margin-top:var(--s4);padding:var(--s4);background:var(--surface);border-radius:var(--r-md);text-align:right;animation:fadeUp .4s ease}
+.reveal-content.show{display:block}
+
+.code-wrap{position:relative;margin:var(--s3) 0}
+.code-wrap pre{background:#0D1117;color:#C9D1D9;padding:var(--s5);border-radius:var(--r-md);font-size:.85rem;line-height:1.75;overflow-x:auto;direction:ltr;text-align:left;border:1px solid #30363D}
+.copy-btn{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.08);color:#C9D1D9;border:1px solid rgba(255,255,255,.15);padding:6px 12px;border-radius:var(--r-sm);cursor:pointer;font-size:.72rem;font-family:var(--font-body);font-weight:700;transition:all .2s}
+.copy-btn:hover{background:rgba(255,255,255,.15)}
+.copy-btn.copied{background:var(--success);border-color:var(--success);color:#fff}
+.k{color:#FF7B72}.f{color:#D2A8FF}.n{color:#79C0FF}.s{color:#A5D6FF}.c{color:#8B949E;font-style:italic}.t{color:#7EE787}.i{color:#FFA657}
+
+.quiz-block{margin-bottom:var(--s4)}
+.quiz-q{font-weight:800;margin-bottom:var(--s3);font-size:1rem}
+.quiz-opts{display:flex;flex-direction:column;gap:var(--s2)}
+.quiz-opt{padding:var(--s3) var(--s4);border:2px solid var(--border);border-radius:var(--r-md);background:var(--surface);font-family:var(--font-body);font-size:.95rem;text-align:right;cursor:pointer;transition:all .2s;color:var(--text)}
+.quiz-opt:hover:not(:disabled){background:var(--advanced-bg);border-color:var(--advanced);transform:translateX(-4px)}
+.quiz-opt:disabled{cursor:default}
+.quiz-opt.correct{background:var(--success-bg);border-color:var(--success);font-weight:800}
+.quiz-opt.wrong{background:var(--danger-bg);border-color:var(--danger)}
+.quiz-fb{display:none;margin-top:var(--s3);padding:var(--s3);border-radius:var(--r-md);font-weight:700;font-size:.9rem;text-align:center}
+.quiz-fb.show{display:block}
+.quiz-fb.ok{background:var(--success-bg);color:var(--success);border:1px solid var(--success-border)}
+.quiz-fb.no{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-border)}
+
+.nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:var(--s3);align-items:center;z-index:100;background:var(--surface);padding:10px 16px;border-radius:var(--r-full);box-shadow:var(--shadow-lg);border:1px solid var(--border)}
+.nav-btn{padding:10px 22px;border-radius:var(--r-full);border:none;background:var(--text);color:var(--surface);font-weight:800;cursor:pointer;font-family:var(--font-body);font-size:.9rem;transition:transform .2s,opacity .2s;display:flex;align-items:center;gap:var(--s2)}
+.nav-btn:hover:not(:disabled){transform:scale(1.06)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed}
+.nav-btn.primary{background:var(--advanced)}
+.nav-counter{font-family:var(--font-code);font-weight:700;color:var(--text-muted);font-size:.85rem;padding:0 var(--s2)}
+
+.hero{background:linear-gradient(160deg,#0C4A6E 0%,#065F46 60%,#0891B2 100%);color:#fff;position:relative;overflow:hidden;max-width:none;padding:var(--s8) var(--s6);min-height:100vh}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 15% 20%,rgba(5,150,105,.5),transparent 40%),radial-gradient(circle at 85% 80%,rgba(8,145,178,.4),transparent 40%)}
+.hero-inner{position:relative;z-index:2;text-align:center;max-width:900px;margin:0 auto}
+.hero-title{font-size:clamp(2.5rem,7vw,4.5rem);font-weight:900;line-height:1.1;margin:var(--s5) 0}
+.hero-sub{font-size:clamp(1.1rem,2.5vw,1.5rem);color:#A7F3D0;font-weight:700}
+.hero-meta{display:flex;gap:var(--s3);justify-content:center;flex-wrap:wrap;margin-top:var(--s6)}
+.pill{padding:8px 18px;border-radius:var(--r-full);background:rgba(255,255,255,.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.2);font-size:.85rem;font-weight:700}
+
+.notes{position:fixed;bottom:80px;right:16px;width:340px;max-height:60vh;overflow-y:auto;background:var(--warning-bg);color:var(--text);border:2px solid var(--warning);border-radius:var(--r-md);padding:var(--s4);font-size:.85rem;z-index:90;box-shadow:var(--shadow-lg);display:none}
+.notes.show{display:block;animation:fadeUp .3s ease}
+.notes-title{font-weight:900;color:var(--warning);margin-bottom:var(--s2);font-size:.75rem;letter-spacing:1px}
+
+/* BME280 Board Diagram */
+.bme-board{width:200px;height:200px;margin:0 auto;background:linear-gradient(135deg,#1E3A8A,#1E40AF);border-radius:10px;border:2px solid #0F172A;position:relative;box-shadow:0 12px 40px rgba(30,58,138,.35);padding:16px}
+.bme-board::before{content:'BME280';position:absolute;top:-24px;left:50%;transform:translateX(-50%);color:var(--text-muted);font-weight:800;font-size:.8rem;letter-spacing:3px;font-family:var(--font-code)}
+.bme-chip{width:60px;height:60px;margin:20px auto 0;background:#0F172A;border:2px solid #334155;border-radius:6px;display:grid;place-items:center;color:#94A3B8;font-size:.55rem;font-weight:800;text-align:center;line-height:1.3;padding:4px}
+.bme-holes{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+.bme-hole{width:12px;height:12px;border-radius:50%;background:#94A3B8;border:1px solid #64748B;position:relative}
+.bme-hole::after{content:attr(data-pin);position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:.5rem;color:var(--text-muted);font-family:var(--font-code);font-weight:700;white-space:nowrap}
+.bme-hole.vcc{background:var(--danger)}
+.bme-hole.gnd{background:#334155}
+.bme-hole.sda{background:var(--info)}
+.bme-hole.scl{background:var(--advanced)}
+
+/* Pressure vs Altitude Diagram */
+.atmosphere{position:relative;height:280px;background:linear-gradient(180deg,#0C4A6E,#0EA5E9 40%,#BAE6FD 100%);border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--info-border)}
+.layer{position:absolute;left:0;right:0;padding:8px 16px;color:#fff;font-size:.75rem;font-weight:800;display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed rgba(255,255,255,.3)}
+.layer-num{font-family:var(--font-code);font-size:.7rem;opacity:.85}
+.hiker{position:absolute;left:24px;font-size:2rem;transition:bottom .6s ease}
+.mountain{position:absolute;bottom:0;right:10%;font-size:6rem;opacity:.85}
+
+/* I2C Wiring */
+.i2c-diagram{background:var(--surface-2);border-radius:var(--r-lg);padding:var(--s5);border:1px solid var(--border)}
+.i2c-row{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) 0;border-bottom:1px dashed var(--border)}
+.i2c-row:last-child{border-bottom:none}
+.i2c-pin{width:70px;font-family:var(--font-code);font-weight:800;font-size:.85rem;text-align:center;padding:4px 8px;border-radius:var(--r-sm)}
+.i2c-pin.vcc{background:var(--danger-bg);color:var(--danger)}
+.i2c-pin.gnd{background:#334155;color:#FFF}
+.i2c-pin.sda{background:var(--info-bg);color:var(--info)}
+.i2c-pin.scl{background:var(--advanced-bg);color:var(--advanced)}
+.i2c-line{flex:1;height:2px;background:var(--border);position:relative}
+.i2c-line::after{content:'→';position:absolute;right:-8px;top:-10px;color:var(--text-muted);font-size:.9rem}
+.i2c-desc{font-size:.85rem;color:var(--text-muted)}
+
+/* Simulator */
+.sim-container{background:linear-gradient(180deg,var(--surface-2),var(--surface));border-radius:var(--r-lg);padding:var(--s5);border:1px solid var(--border)}
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--s5)}
+@media(max-width:768px){.sim-grid{grid-template-columns:1fr}}
+.sim-scene{position:relative;height:260px;background:linear-gradient(180deg,#0C4A6E,#0EA5E9 40%,#BAE6FD 100%);border-radius:var(--r-md);overflow:hidden;border:1px solid var(--info-border)}
+.sim-sun{position:absolute;top:16px;right:24px;font-size:2rem}
+.sim-cloud{position:absolute;top:36px;left:30%;font-size:1.6rem;opacity:.9;animation:cloudMove 8s ease-in-out infinite alternate}
+@keyframes cloudMove{from{transform:translateX(-10px)}to{transform:translateX(20px)}}
+.sim-ground{position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(180deg,#15803D,#166534);border-top:3px solid #14532D}
+.sim-mountain{position:absolute;bottom:30%;right:8%;font-size:5rem}
+.sim-balloon{position:absolute;font-size:2.4rem;transition:bottom .4s ease,left .4s ease;left:20px}
+.sim-readout{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3);background:var(--surface);border-radius:var(--r-md);padding:var(--s4);border:1px solid var(--border)}
+.sim-metric{text-align:center}
+.sim-metric-label{font-size:.72rem;color:var(--text-muted);font-weight:700;margin-bottom:4px}
+.sim-metric-value{font-family:var(--font-code);font-weight:900;font-size:1.3rem;transition:color .3s}
+.sim-metric-unit{font-size:.65rem;color:var(--text-muted);font-family:var(--font-code)}
+.sim-controls{display:flex;flex-direction:column;gap:var(--s3)}
+.sim-slider-row{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
+.sim-slider-row label{font-weight:800;min-width:110px;font-size:.9rem}
+.sim-slider{flex:1;min-width:180px;height:8px;border-radius:var(--r-full);background:var(--border);-webkit-appearance:none;appearance:none;cursor:pointer}
+.sim-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--advanced);cursor:pointer;box-shadow:var(--shadow-md);border:3px solid var(--surface)}
+.sim-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--advanced);cursor:pointer;border:3px solid var(--surface)}
+.sim-value{font-family:var(--font-code);font-weight:800;color:var(--advanced);min-width:80px;text-align:center;background:var(--advanced-bg);padding:4px 10px;border-radius:var(--r-sm);font-size:.85rem}
+.serial{background:#0D1117;color:#4ADE80;border-radius:var(--r-md);padding:var(--s4);font-family:var(--font-code);font-size:.8rem;min-height:120px;max-height:160px;overflow-y:auto;direction:ltr;text-align:left;border:1px solid #30363D}
+.serial .dim{color:#64748B}.serial .ok{color:#4ADE80}.serial .warn{color:#FBBF24}
+
+.mt-3{margin-top:var(--s3)}.mt-4{margin-top:var(--s4)}.mt-5{margin-top:var(--s5)}
+.mb-3{margin-bottom:var(--s3)}.mb-4{margin-bottom:var(--s4)}
+.center{text-align:center}
+.flex{display:flex}.gap-3{gap:var(--s3)}.gap-4{gap:var(--s4)}
+.items-center{align-items:center}.justify-center{justify-content:center}
+</style>
+</head>
+<body>
+
+<div class="progress-dots" id="dots"></div>
+<button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" aria-label="تبديل الوضع">🌙</button>
+<div class="notes" id="notes">
+  <div class="notes-title">📝 ملاحظات المُعلّم (N)</div>
+  <div id="notesContent">اضغط N لعرض الملاحظات</div>
+</div>
+
+<!-- ═══ 1. العنوان ═══ -->
+<section class="slide hero active" data-notes="🎯 Hook: ارفع يدك عالياً ثم أنزلها — 'لو صعدت جبل إيفرست، وزن الهواء فوقك أقل! كيف يقيس ESP32 هذا؟'. ثم اكشف العنوان. لا تشرح — أثر الفضول.">
+  <div class="hero-inner">
+    <span class="pill">🎓 المستوى الثالث — هندسة ESP32 و IoT</span>
+    <div style="font-size:5rem;margin:var(--s5) 0">🌡️⛰️</div>
+    <h1 class="hero-title">BME280</h1>
+    <p class="hero-sub">حساس يقيس الحرارة والرطوبة والضغط — ويحسب الارتفاع عن سطح البحر!</p>
+    <div class="hero-meta">
+      <span class="pill">📡 محاضرة 4 من 16</span>
+      <span class="pill">⏱️ 45 دقيقة</span>
+      <span class="pill">🌡️ I2C + Physics</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2. Spaced Recall + Predict ═══ -->
+<section class="slide" data-notes="🎯 اسأل عن L3-03 بصوت عالٍ — لا تُجب. ثم Predict: أعطِ دقيقتين للكتابة. الجواب المتوقع: 'نقيس الضغط' أو 'نستخدم مستشعر'. اكشف بعد الكتابة.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🤔 قبل أن نبدأ</h2>
+    <span class="slide-number">02 / 11</span>
+  </div>
+
+  <div class="grid grid-2 mb-4">
+    <div class="box box-info">
+      <b>📚 تذكّر من L3-03:</b>
+      <p class="mt-3">بنينا ساعة ذكية تجلب الوقت من الإنترنت عبر <b>NTP</b> — بدون RTC، بدون ضبط يدوي. وربطناها بشاشة OLED.</p>
+    </div>
+    <div class="box box-warning">
+      <b>💭 فكّر:</b>
+      <p class="mt-3">كيف يعرف جهاز <b>الارتفاع عن سطح البحر</b> بدون GPS؟ وكيف تعرف طائرة ارتفاعها في السماء؟</p>
+    </div>
+  </div>
+
+  <div class="predict">
+    <div class="predict-icon">🔮</div>
+    <h3>توقّع أولاً</h3>
+    <p class="muted">ما العلاقة بين <b>الضغط الجوي</b> و<b>الارتفاع عن سطح البحر</b>؟</p>
+    <textarea class="predict-input" placeholder="اكتب تخمينك هنا..."></textarea>
+    <div><button class="reveal-btn" onclick="reveal(this)">▶ اكشف الإجابة</button></div>
+    <div class="reveal-content">
+      <b style="color:var(--success)">✅ الإجابة:</b>
+      <p class="mt-3">العلاقة <b>عكسية</b>: كلما ارتفعت عن سطح البحر، قلّ الضغط الجوي. لأن عمود الهواء فوقك أصبح أقصر وأخف.</p>
+      <p class="mt-3"><b>على سطح البحر:</b> الضغط ≈ <code>1013 hPa</code>.<br>
+      <b>على قمة إيفرست (8848م):</b> الضغط ≈ <code>337 hPa</code> — ثلث القيمة فقط!</p>
+      <p class="mt-3">بمعادلة فيزيائية بسيطة، ESP32 يحوّل الضغط إلى ارتفاع دقيق. لهذا الطائرات والمسّاحون يستخدمون <b>مقياس الارتفاع البارومتري</b>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3. شرح: BME280 ═══ -->
+<section class="slide" data-notes="🎯 ركّز على '3 حساسات في شريحة واحدة'. ارسم على السبورة: حرارة + رطوبة + ضغط = طقس كامل. اذكر أن الضغط هو الميزة الأهم — لأنه يمنحنا الارتفاع.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🔬 ما هو BME280؟</h2>
+    <span class="slide-number">03 / 11</span>
+  </div>
+
+  <div class="grid grid-2 items-center mb-4">
+    <div class="card">
+      <h3 style="color:var(--info)">💡 ثلاثة في واحد</h3>
+      <p class="mt-3">BME280 ليس حساساً واحداً — بل <b>ثلاثة حساسات</b> في شريحة صغيرة بحجم ظفر الإصبع:</p>
+      <div class="grid mt-4" style="gap:var(--s3)">
+        <div style="padding:var(--s3);background:var(--danger-bg);border-radius:var(--r-md);border-right:4px solid var(--danger)">
+          <b>🌡️ حرارة</b> — من -40° إلى +85° (دقة ±1°)
+        </div>
+        <div style="padding:var(--s3);background:var(--info-bg);border-radius:var(--r-md);border-right:4px solid var(--info)">
+          <b>💧 رطوبة</b> — نسبة بخار الماء في الهواء (0-100%)
+        </div>
+        <div style="padding:var(--s3);background:var(--advanced-bg);border-radius:var(--r-md);border-right:4px solid var(--advanced)">
+          <b>📊 ضغط جوي</b> — من 300 إلى 1100 hPa
+        </div>
+      </div>
+    </div>
+    <div class="card center">
+      <h3 style="color:var(--advanced)">🎯 الميزة القاتلة</h3>
+      <div style="font-size:4rem;margin:var(--s4) 0">⛰️</div>
+      <p class="mt-3"><b>من الضغط نحسب الارتفاع!</b></p>
+      <p class="muted mt-3" style="font-size:.85rem">هذه هي المعادلة الفيزيائية التي سنستخدمها:</p>
+      <div class="code-wrap mt-3" style="text-align:left">
+<pre style="padding:var(--s3);font-size:.75rem"><code>altitude = 44330 × (1 - (P/1013.25)^0.19)</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="box box-advanced">
+    <b>🎯 لماذا هذا مذهل؟</b> في مشروع واحد — إنترنت + ساعة + طقس + ارتفاع. كل هذا من شريحة بحجم 2 سم وبسعر أقل من فنجان قهوة ☕.
+  </div>
+</section>
+
+<!-- ═══ 4. تشريح: BME280 + I2C ═══ -->
+<section class="slide" data-notes="🎯 اعرض اللوحة الحقيقية. اشرح أن I2C هو نفس البروتوكول الذي استخدمناه للـ OLED — لذا التوصيل سهل. ركّز على عنوان I2C: 0x76 أو 0x77.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🔬 تشريح BME280 + I2C</h2>
+    <span class="slide-number">04 / 11</span>
+  </div>
+
+  <div class="grid grid-2">
+    <div>
+      <h3 class="center mb-3" style="color:var(--advanced)">شريحة BME280</h3>
+      <div class="bme-board">
+        <div class="bme-chip">BME280<br>Bosch</div>
+        <div class="bme-holes">
+          <div class="bme-hole vcc" data-pin="VCC"></div>
+          <div class="bme-hole gnd" data-pin="GND"></div>
+          <div class="bme-hole scl" data-pin="SCL"></div>
+          <div class="bme-hole sda" data-pin="SDA"></div>
+        </div>
+      </div>
+      <div class="box box-info mt-4" style="font-size:.85rem">
+        <b>💡 4 أطراف فقط</b> — بسبب بروتوكول I2C الذي يستخدم سلكين فقط للبيانات.
+      </div>
+    </div>
+
+    <div>
+      <h3 class="center mb-3" style="color:var(--info)">جدول التوصيل بـ ESP32</h3>
+      <div class="i2c-diagram">
+        <div class="i2c-row">
+          <span class="i2c-pin gnd">GND</span>
+          <div class="i2c-line"></div>
+          <span class="i2c-pin gnd">GND</span>
+          <span class="i2c-desc">الأرضي المشترك</span>
+        </div>
+        <div class="i2c-row">
+          <span class="i2c-pin vcc">VCC</span>
+          <div class="i2c-line"></div>
+          <span class="i2c-pin vcc">3.3V</span>
+          <span class="i2c-desc">⚠️ 3.3V وليس 5V!</span>
+        </div>
+        <div class="i2c-row">
+          <span class="i2c-pin scl">SCL</span>
+          <div class="i2c-line"></div>
+          <span class="i2c-pin scl">GPIO 22</span>
+          <span class="i2c-desc">ساعة البيانات</span>
+        </div>
+        <div class="i2c-row">
+          <span class="i2c-pin sda">SDA</span>
+          <div class="i2c-line"></div>
+          <span class="i2c-pin sda">GPIO 21</span>
+          <span class="i2c-desc">بيانات I2C</span>
+        </div>
+      </div>
+      <div class="box box-advanced mt-4" style="font-size:.85rem">
+        <b>🎯 عنوان I2C:</b> بعض النسخ <code>0x76</code>، وأخرى <code>0x77</code>. المكتبة تكتشفه تلقائياً.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5. تحذيرات أمنية ═══ -->
+<section class="slide" data-notes="🎯 3 تحذيرات: (1) 3.3V فقط (2) لا تلمس الشريحة بأصابعك — الحساسات دقيقة (3) لا تُعرّضها للرطوبة المباشرة (رغم أنها تقيس الرطوبة! الطبقة الخارجية غير مقاومة للماء).">
+  <div class="slide-header">
+    <span class="slide-badge" style="background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)">⚠️ تحذير حرج</span>
+    <h2 style="margin:0;color:var(--danger)">🛡️ 3 قواعد مهمة</h2>
+    <span class="slide-number">05 / 11</span>
+  </div>
+
+  <div class="box box-danger mb-5" style="padding:var(--s5)">
+    <b style="font-size:1.1rem">⚡ تحذير 1 — الجهد:</b>
+    <p class="mt-3">BME280 يعمل بـ <b>3.3V</b>. توصيله بـ 5V يُتلفه <b>فوراً</b>. هذه هي نفس القاعدة الذهبية لـ ESP32 — نصف مكوناتنا تعمل بـ 3.3V.</p>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="box box-warning">
+      <b>⚠️ تحذير 2 — لا تلمسه:</b>
+      <p class="mt-3">الحساسات الدقيقة داخل BME280 تتأثر بزيوت الأصابع وحرارة الجسم. لو لمسته مباشرة، القراءات ستنحرف لثوانٍ.</p>
+    </div>
+    <div class="box box-warning">
+      <b>⚠️ تحذير 3 — الرطوبة المباشرة:</b>
+      <p class="mt-3">رغم أن BME280 يقيس الرطوبة، فإنه <b>لا يتحمل الماء السائل</b>. لا تضعه في مكان قد يتبلّل — استخدم غلافاً واقياً في المشاريع الخارجية.</p>
+    </div>
+  </div>
+
+  <div class="box box-info mt-5">
+    <b>💡 نصيحة عملية:</b> ضع BME280 بعيداً عن ESP32 نفسه — لأن ESP32 يسخن قليلاً أثناء العمل، وقد يؤثر على قراءة الحرارة. 5 سم كافية.
+  </div>
+</section>
+
+<!-- ═══ 6. الإعداد — المكتبة ═══ -->
+<section class="slide" data-notes="🎯 مكتبة واحدة فقط: Adafruit_BME280. تثبّتها من Library Manager. عند التثبيت، قد تسأل عن مكتبات مساعدة (Adafruit Unified Sensor + BusIO) — اختر Install all.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">💻 تثبيت المكتبة المطلوبة</h2>
+    <span class="slide-number">06 / 11</span>
+  </div>
+
+  <p class="muted mb-4">مكتبة واحدة فقط — مع تبعياتها. العملية مماثلة لـ OLED.</p>
+
+  <div class="card mb-4" style="border-right:4px solid var(--advanced)">
+    <h3 style="color:var(--advanced);font-size:1.05rem">📚 Adafruit BME280 Library</h3>
+    <p class="muted mt-3" style="font-size:.9rem">توفر دوال بسيطة: <code>readTemperature()</code>، <code>readPressure()</code>، <code>readHumidity()</code>، <code>readAltitude()</code>.</p>
+    <p class="mt-3"><b>الكاتب:</b> Adafruit — موثوق ومستقر.</p>
+  </div>
+
+  <div class="box box-info">
+    <b>📝 خطوات التثبيت:</b>
+    <p class="mt-3">Sketch → Include Library → Manage Libraries → ابحث عن <code>BME280</code> → اختر نسخة Adafruit → Install.</p>
+    <p class="mt-3">عند السؤال عن التبعيات (Adafruit Unified Sensor + BusIO) — اختر <b>Install all</b>.</p>
+  </div>
+
+  <div class="box box-warning mt-4">
+    <b>⚠️ احترس:</b> هناك عدة مكتبات بنفس الاسم. اختر نسخة <b>Adafruit BME280</b> تحديداً — وليست نسخة BME280 القديمة أو Bosch الرسمية (تتطلب إعداداً معقداً).
+  </div>
+</section>
+
+<!-- ═══ 7. الكود 1 — قراءة أولية ═══ -->
+<section class="slide" data-notes="🎯 أول اختبار: قراءة الحرارة والرطوبة والضغط فقط. اطلب من الطلاب رفعه وفتح Serial Monitor. اسأل: 'هل ضغطوا بأصابعهم على الحساس؟' — يلاحظون انحراف الحرارة.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🧪 الكود 1: قراءة أولية</h2>
+    <span class="slide-number">07 / 11</span>
+  </div>
+
+  <p class="muted mb-4">قبل OLED، نتأكد أن BME280 يعمل ونقرأ الثلاث قيم على Serial Monitor.</p>
+
+  <div class="code-wrap">
+    <button class="copy-btn" onclick="copyCode(this)">📋 نسخ</button>
+<pre><code><span class="i">#include</span> <span class="s">&lt;Wire.h&gt;</span>
+<span class="i">#include</span> <span class="s">&lt;Adafruit_BME280.h&gt;</span>
+
+<span class="t">Adafruit_BME280</span> bme;   <span class="c">// كائن الحساس</span>
+
+<span class="t">void</span> <span class="f">setup</span>() {
+  <span class="f">Serial</span>.<span class="f">begin</span>(<span class="n">115200</span>);
+
+  <span class="k">if</span> (!bme.<span class="f">begin</span>(<span class="n">0x76</span>)) {       <span class="c">// جرّب 0x77 إن فشل</span>
+    <span class="f">Serial</span>.<span class="f">println</span>(<span class="s">"BME280 not found!"</span>);
+    <span class="k">while</span> (<span class="n">1</span>);
+  }
+  <span class="f">Serial</span>.<span class="f">println</span>(<span class="s">"BME280 Ready!"</span>);
+}
+
+<span class="t">void</span> <span class="f">loop</span>() {
+  <span class="t">float</span> t = bme.<span class="f">readTemperature</span>();  <span class="c">// °C</span>
+  <span class="t">float</span> h = bme.<span class="f">readHumidity</span>();     <span class="c">// %</span>
+  <span class="t">float</span> p = bme.<span class="f">readPressure</span>() / <span class="n">100.0F</span>;  <span class="c">// hPa</span>
+
+  <span class="f">Serial</span>.<span class="f">print</span>(<span class="s">"Temp: "</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(t, <span class="n">1</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(<span class="s">" C | Hum: "</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(h, <span class="n">1</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(<span class="s">" % | Press: "</span>);
+  <span class="f">Serial</span>.<span class="f">print</span>(p, <span class="n">1</span>);
+  <span class="f">Serial</span>.<span class="f">println</span>(<span class="s">" hPa"</span>);
+
+  <span class="f">delay</span>(<span class="n">2000</span>);
+}</code></pre>
+  </div>
+
+  <div class="grid grid-2 mt-4">
+    <div class="box box-success"><b>✅ القيم المتوقعة:</b> Temp ~25°C, Hum ~50%, Press ~1013 hPa</div>
+    <div class="box box-danger"><b>❌ لو ظهر "not found":</b> جرّب العنوان <code>0x77</code> أو تحقق من التوصيل</div>
+  </div>
+</section>
+
+<!-- ═══ 8. الكود 2 — محطة طقس كاملة ═══ -->
+<section class="slide" data-notes="🎯 الكود الكامل. ركّز على readAltitude — هذه الميزة السحرية. ارفعه أمام الطلاب واعرض الأرقام. اطلب من طالب أن يرفع الحساس عالياً — لاحظوا فرق الارتفاع بالسنتيمترات!">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🌤️ الكود 2: محطة طقس + مقياس ارتفاع</h2>
+    <span class="slide-number">08 / 11</span>
+  </div>
+
+  <div class="code-wrap">
+    <button class="copy-btn" onclick="copyCode(this)">📋 نسخ</button>
+<pre><code><span class="i">#include</span> <span class="s">&lt;Wire.h&gt;</span>
+<span class="i">#include</span> <span class="s">&lt;Adafruit_BME280.h&gt;</span>
+<span class="i">#include</span> <span class="s">&lt;Adafruit_GFX.h&gt;</span>
+<span class="i">#include</span> <span class="s">&lt;Adafruit_SSD1306.h&gt;</span>
+
+<span class="k">#define</span> SCREEN_W <span class="n">128</span>
+<span class="k">#define</span> SCREEN_H <span class="n">64</span>
+<span class="k">#define</span> OLED_ADDR <span class="n">0x3C</span>
+<span class="k">#define</span> SEA_LEVEL_HPA <span class="n">1013.25</span>
+
+<span class="t">Adafruit_BME280</span> bme;
+<span class="t">Adafruit_SSD1306</span> display(SCREEN_W, SCREEN_H, &Wire, <span class="n">-1</span>);
+
+<span class="t">void</span> <span class="f">setup</span>() {
+  <span class="f">Serial</span>.<span class="f">begin</span>(<span class="n">115200</span>);
+  <span class="f">Wire</span>.<span class="f">begin</span>(<span class="n">21</span>, <span class="n">22</span>);
+
+  <span class="k">if</span> (!bme.<span class="f">begin</span>(<span class="n">0x76</span>)) {
+    <span class="f">Serial</span>.<span class="f">println</span>(<span class="s">"BME280 failed!"</span>);
+    <span class="k">while</span> (<span class="n">1</span>);
+  }
+
+  display.<span class="f">begin</span>(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  display.<span class="f">clearDisplay</span>();
+  display.<span class="f">setTextColor</span>(SSD1306_WHITE);
+  display.<span class="f">setTextSize</span>(<span class="n">1</span>);
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">0</span>);
+  display.<span class="f">println</span>(<span class="s">"BME280 Ready"</span>);
+  display.<span class="f">display</span>();
+  <span class="f">delay</span>(<span class="n">1000</span>);
+}
+
+<span class="t">void</span> <span class="f">loop</span>() {
+  <span class="t">float</span> t = bme.<span class="f">readTemperature</span>();
+  <span class="t">float</span> h = bme.<span class="f">readHumidity</span>();
+  <span class="t">float</span> p = bme.<span class="f">readPressure</span>() / <span class="n">100.0F</span>;
+  <span class="t">float</span> alt = bme.<span class="f">readAltitude</span>(SEA_LEVEL_HPA);  <span class="c">// متر</span>
+
+  display.<span class="f">clearDisplay</span>();
+
+  <span class="c">// العنوان</span>
+  display.<span class="f">setTextSize</span>(<span class="n">1</span>);
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">0</span>);
+  display.<span class="f">println</span>(<span class="s">"== Weather Station =="</span>);
+
+  <span class="c">// الحرارة</span>
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">14</span>);
+  display.<span class="f">print</span>(<span class="s">"T: "</span>);
+  display.<span class="f">print</span>(t, <span class="n">1</span>);
+  display.<span class="f">println</span>(<span class="s">" C"</span>);
+
+  <span class="c">// الرطوبة</span>
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">26</span>);
+  display.<span class="f">print</span>(<span class="s">"H: "</span>);
+  display.<span class="f">print</span>(h, <span class="n">1</span>);
+  display.<span class="f">println</span>(<span class="s">" %"</span>);
+
+  <span class="c">// الضغط</span>
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">38</span>);
+  display.<span class="f">print</span>(<span class="s">"P: "</span>);
+  display.<span class="f">print</span>(p, <span class="n">1</span>);
+  display.<span class="f">println</span>(<span class="s">" hPa"</span>);
+
+  <span class="c">// الارتفاع (كبير)</span>
+  display.<span class="f">setTextSize</span>(<span class="n">2</span>);
+  display.<span class="f">setCursor</span>(<span class="n">0</span>, <span class="n">52</span>);
+  display.<span class="f">print</span>((<span class="t">int</span>)alt);
+  display.<span class="f">println</span>(<span class="s">" m"</span>);
+
+  display.<span class="f">display</span>();
+  <span class="f">delay</span>(<span class="n">2000</span>);
+}</code></pre>
+  </div>
+
+  <div class="box box-advanced mt-4">
+    <b>🎯 3 أفكار مفتاحية:</b>
+    <p class="mt-3">
+      <code>bme.begin(0x76)</code> — العنوان I2C (جرّب 0x77 إن فشل).<br>
+      <code>readPressure() / 100.0</code> — التحويل من Pa إلى hPa.<br>
+      <code>readAltitude(1013.25)</code> — يحسب الارتفاع من الضغط تلقائياً!
+    </p>
+  </div>
+</section>
+
+<!-- ═══ 9. المحاكي الحي ═══ -->
+<section class="slide" data-notes="🎯 حرّك شريط الارتفاع — لاحظ انخفاض الضغط وانخفاض الحرارة معاً. اسأل: 'لماذا تنخفض الحرارة أيضاً؟' (لأن الهواء العلوي أبرد). أضف جوّاً ماطراً — لاحظ ارتفاع الرطوبة وانخفاض الضغط.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🎮 محاكاة حية: BME280 في الجبال</h2>
+    <span class="slide-number">09 / 11</span>
+  </div>
+
+  <p class="muted mb-4">حرّك الارتفاع — وشاهد كيف تتغير الحرارة والضغط والرطوبة تلقائياً. هذا بالضبط ما يقيسه BME280 في مشروعك.</p>
+
+  <div class="sim-container">
+    <div class="sim-grid">
+      <div>
+        <div class="sim-scene">
+          <div class="sim-sun">☀️</div>
+          <div class="sim-cloud">☁️</div>
+          <div class="sim-ground"></div>
+          <div class="sim-mountain" id="simMountain">⛰️</div>
+          <div class="sim-balloon" id="simBalloon" style="bottom:80px">🎈</div>
+        </div>
+        <div class="serial mt-3" id="serial">
+          <div class="dim">BME280 Ready!</div>
+        </div>
+      </div>
+
+      <div class="sim-controls">
+        <div class="sim-slider-row">
+          <label>⛰️ الارتفاع:</label>
+          <input type="range" class="sim-slider" id="altSlider" min="0" max="5000" value="0" oninput="updateSim()">
+          <span class="sim-value" id="altValue">0 m</span>
+        </div>
+
+        <div class="sim-slider-row">
+          <label>💧 الرطوبة:</label>
+          <input type="range" class="sim-slider" id="humSlider" min="10" max="95" value="50" oninput="updateSim()">
+          <span class="sim-value" id="humValue">50 %</span>
+        </div>
+
+        <div class="sim-slider-row">
+          <label>🌡️ الحرارة الأساسية:</label>
+          <input type="range" class="sim-slider" id="tempSlider" min="15" max="40" value="25" oninput="updateSim()">
+          <span class="sim-value" id="tempValue">25 °C</span>
+        </div>
+
+        <div class="sim-readout" style="grid-template-columns:repeat(2,1fr);gap:var(--s2);padding:var(--s3);margin-top:var(--s2)">
+          <div class="sim-metric">
+            <div class="sim-metric-label">🌡️ الحرارة</div>
+            <div class="sim-metric-value" id="simTemp" style="color:var(--danger)">25.0</div>
+            <div class="sim-metric-unit">°C</div>
+          </div>
+          <div class="sim-metric">
+            <div class="sim-metric-label">💧 الرطوبة</div>
+            <div class="sim-metric-value" id="simHum" style="color:var(--info)">50.0</div>
+            <div class="sim-metric-unit">%</div>
+          </div>
+          <div class="sim-metric">
+            <div class="sim-metric-label">📊 الضغط</div>
+            <div class="sim-metric-value" id="simPress" style="color:var(--advanced)">1013</div>
+            <div class="sim-metric-unit">hPa</div>
+          </div>
+          <div class="sim-metric">
+            <div class="sim-metric-label">⛰️ الارتفاع</div>
+            <div class="sim-metric-value" id="simAlt" style="color:var(--success)">0</div>
+            <div class="sim-metric-unit">m</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-3 mt-4">
+    <div class="box box-success"><b>🏖️ سطح البحر (0م):</b> ضغط ~1013 hPa، حرارة عالية</div>
+    <div class="box box-warning"><b>🏔️ 2500م:</b> ضغط ~750 hPa، حرارة أقل بـ ~15°</div>
+    <div class="box box-danger"><b>🗻 5000م:</b> ضغط ~540 hPa، حرارة أقل بـ ~30°</div>
+  </div>
+</section>
+
+<!-- ═══ 10. Quiz ═══ -->
+<section class="slide" data-notes="🎯 3 أسئلة Exit Ticket. دقيقتان فقط.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🎫 تذكرة الخروج</h2>
+    <span class="slide-number">10 / 11</span>
+  </div>
+
+  <div class="quiz-block card">
+    <p class="quiz-q">1️⃣ ما الذي يقيسه BME280؟</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" onclick="answer(this,false,1)">أ) الحرارة فقط</button>
+      <button class="quiz-opt" data-correct="1" onclick="answer(this,true,1)">ب) الحرارة + الرطوبة + الضغط</button>
+      <button class="quiz-opt" onclick="answer(this,false,1)">ج) الحركة والاتجاه</button>
+    </div>
+    <div class="quiz-fb" id="fb1"></div>
+  </div>
+
+  <div class="quiz-block card">
+    <p class="quiz-q">2️⃣ عندما نصعد جبلاً — ماذا يحدث للضغط الجوي؟</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" onclick="answer(this,false,2)">أ) يرتفع</button>
+      <button class="quiz-opt" data-correct="1" onclick="answer(this,true,2)">ب) ينخفض (عمود الهواء فوقنا أقصر)</button>
+      <button class="quiz-opt" onclick="answer(this,false,2)">ج) يبقى ثابتاً</button>
+    </div>
+    <div class="quiz-fb" id="fb2"></div>
+  </div>
+
+  <div class="quiz-block card">
+    <p class="quiz-q">3️⃣ ما وظيفة <code>readAltitude()</code>؟</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" onclick="answer(this,false,3)">أ) تقيس الارتفاع بالـ GPS</button>
+      <button class="quiz-opt" data-correct="1" onclick="answer(this,true,3)">ب) تحوّل قراءة الضغط إلى ارتفاع بالأمتار</button>
+      <button class="quiz-opt" onclick="answer(this,false,3)">ج) تضبط الساعة</button>
+    </div>
+    <div class="quiz-fb" id="fb3"></div>
+  </div>
+
+  <div class="box box-info mt-4">
+    <b>💡 تذكّر:</b> BME280 يحتاج <b>الضغط عند سطح البحر</b> كنقطة مرجع. القيمة القياسية <code>1013.25 hPa</code> — لكنها تتغير حسب الطقس. في المشاريع الدقيقة، تُحدَّث يومياً من مصادر الطقس.
+  </div>
+</section>
+
+<!-- ═══ 11. الخاتمة ═══ -->
+<section class="slide" data-notes="🎯 صفقوا! أول حساس بيئي متعدد. راجع الإنجازات. اكشف المحاضرة القادمة (MPU6050 - الجيروسكوب). واجب: فكّر في 3 تطبيقات عملية لمحطة طقس.">
+  <div class="slide-header">
+    <span class="slide-badge">L3-04</span>
+    <h2 style="margin:0">🏆 أُنجزنا!</h2>
+    <span class="slide-number">11 / 11</span>
+  </div>
+
+  <div class="grid grid-3 mb-5">
+    <div class="card center">
+      <div style="font-size:2rem">🌡️</div>
+      <b class="mt-3" style="display:block">حرارة دقيقة</b>
+      <p class="muted" style="font-size:.8rem">دقة ±1°</p>
+    </div>
+    <div class="card center">
+      <div style="font-size:2rem">💧</div>
+      <b class="mt-3" style="display:block">رطوبة</b>
+      <p class="muted" style="font-size:.8rem">0-100%</p>
+    </div>
+    <div class="card center">
+      <div style="font-size:2rem">📊</div>
+      <b class="mt-3" style="display:block">ضغط جوي</b>
+      <p class="muted" style="font-size:.8rem">hPa</p>
+    </div>
+    <div class="card center">
+      <div style="font-size:2rem">⛰️</div>
+      <b class="mt-3" style="display:block">مقياس ارتفاع</b>
+      <p class="muted" style="font-size:.8rem">بدون GPS!</p>
+    </div>
+    <div class="card center">
+      <div style="font-size:2rem">🔌</div>
+      <b class="mt-3" style="display:block">I2C متقدم</b>
+      <p class="muted" style="font-size:.8rem">نفس بروتوكول OLED</p>
+    </div>
+    <div class="card center">
+      <div style="font-size:2rem">🌤️</div>
+      <b class="mt-3" style="display:block">محطة طقس كاملة</b>
+      <p class="muted" style="font-size:.8rem">على OLED</p>
+    </div>
+  </div>
+
+  <div class="card" style="background:linear-gradient(135deg,var(--advanced-bg),var(--info-bg));border:2px solid var(--advanced-border)">
+    <div class="flex items-center gap-4">
+      <div style="font-size:2.5rem">🚀</div>
+      <div style="flex:1">
+        <p style="font-weight:900;color:var(--advanced);font-size:1.1rem">المحاضرة القادمة (L3-05)</p>
+        <p style="font-size:1.3rem;font-weight:900;margin-top:6px">🎯 MPU6050 — الجهاز يحس بحركته</p>
+        <p class="muted mt-3" style="font-size:.9rem">جيروسكوب + مقياس تسارع — كيف يعرف الموبايل أنه انقلب؟</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="box box-info mt-5">
+    <b>🎒 واجب منزلي:</b> ابحث عن <b>3 تطبيقات عملية</b> لمحطة طقس:
+    <span class="muted">(مثال: محطة طقس زراعية، تتبع منطاد، مراقبة جودة الهواء الداخلي...)</span>
+  </div>
+</section>
+
+<div class="nav">
+  <button class="nav-btn" id="prevBtn" onclick="go(-1)">→ السابق</button>
+  <span class="nav-counter" id="counter">01 / 11</span>
+  <button class="nav-btn primary" id="nextBtn" onclick="go(1)">التالي ←</button>
+</div>
+
+<script>
+/* ═══ Slides Engine ═══ */
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let cur = 0;
+const visited = new Set([0]);
+
+const dotsEl = document.getElementById('dots');
+slides.forEach((_, i) => {
+  const b = document.createElement('button');
+  b.className = 'dot';
+  b.setAttribute('aria-label', 'شريحة ' + (i + 1));
+  b.onclick = () => goto(i);
+  dotsEl.appendChild(b);
+});
+
+function render() {
+  slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i === cur);
+    d.classList.toggle('visited', visited.has(i));
+  });
+  visited.add(cur);
+  document.getElementById('counter').textContent =
+    String(cur + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+  document.getElementById('prevBtn').disabled = cur === 0;
+  document.getElementById('nextBtn').disabled = cur === total - 1;
+  const note = slides[cur].dataset.notes || '';
+  document.getElementById('notesContent').textContent = note || 'لا توجد ملاحظات.';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function goto(i) { cur = Math.max(0, Math.min(total - 1, i)); render(); }
+function go(d) { goto(cur + d); }
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea')) return;
+  if (e.key === 'ArrowLeft') go(1);
+  else if (e.key === 'ArrowRight') go(-1);
+  else if (e.key.toLowerCase() === 'n') document.getElementById('notes').classList.toggle('show');
+  else if (e.key.toLowerCase() === 'd') toggleTheme();
+  else if (e.key.toLowerCase() === 'f') {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+});
+
+/* ═══ Theme ═══ */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '🌙' : '☀️';
+  try { localStorage.setItem('theme', isDark ? 'light' : 'dark'); } catch(e){}
+}
+try {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('themeBtn').textContent = '☀️';
+  }
+} catch(e){}
+
+/* ═══ Predict ═══ */
+function reveal(btn) {
+  btn.closest('.predict').querySelector('.reveal-content').classList.add('show');
+  btn.style.display = 'none';
+}
+
+/* ═══ Copy Code ═══ */
+function copyCode(btn) {
+  const code = btn.parentElement.querySelector('pre code').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '✅ تم';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('copied'); }, 1500);
+  }).catch(() => {
+    btn.textContent = '⚠️ فشل';
+    setTimeout(() => { btn.textContent = '📋 نسخ'; }, 1500);
+  });
+}
+
+/* ═══ BME280 Simulator (real physics model) ═══ */
+function updateSim() {
+  const alt = +document.getElementById('altSlider').value;
+  const hum = +document.getElementById('humSlider').value;
+  const baseTemp = +document.getElementById('tempSlider').value;
+
+  // Physics: Temperature drops ~6.5°C per 1000m in troposphere
+  const temp = baseTemp - (alt / 1000) * 6.5;
+
+  // Physics: Barometric formula for pressure
+  // P = P0 * (1 - 2.25577e-5 * h)^5.25588
+  const pressure = 1013.25 * Math.pow(1 - 2.25577e-5 * alt, 5.25588);
+
+  // Update UI
+  document.getElementById('altValue').textContent = alt + ' m';
+  document.getElementById('humValue').textContent = hum + ' %';
+  document.getElementById('tempValue').textContent = baseTemp + ' °C';
+
+  document.getElementById('simTemp').textContent = temp.toFixed(1);
+  document.getElementById('simHum').textContent = hum.toFixed(1);
+  document.getElementById('simPress').textContent = pressure.toFixed(0);
+  document.getElementById('simAlt').textContent = alt;
+
+  // Color for temp
+  const tempEl = document.getElementById('simTemp');
+  if (temp < 5) tempEl.style.color = 'var(--info)';
+  else if (temp < 20) tempEl.style.color = 'var(--success)';
+  else if (temp < 30) tempEl.style.color = 'var(--warning)';
+  else tempEl.style.color = 'var(--danger)';
+
+  // Move balloon in scene
+  const balloon = document.getElementById('simBalloon');
+  const sceneHeight = 260;
+  const groundTop = sceneHeight * 0.6;
+  const balloonBottom = 20 + (alt / 5000) * (groundTop - 40);
+  balloon.style.bottom = balloonBottom + 'px';
+  balloon.style.left = (20 + (hum - 10) * 1.2) + 'px';
+
+  // Log to serial
+  const serial = document.getElementById('serial');
+  const line = document.createElement('div');
+  line.className = 'ok';
+  line.textContent = `T=${temp.toFixed(1)}C H=${hum.toFixed(1)}% P=${pressure.toFixed(0)}hPa Alt=${alt}m`;
+  serial.appendChild(line);
+  if (serial.children.length > 6) serial.removeChild(serial.children[0]);
+  serial.scrollTop = serial.scrollHeight;
+}
+
+// Init sim when slide 9 opens
+let simInit = false;
+const observer = new MutationObserver(() => {
+  if (slides[8].classList.contains('active') && !simInit) {
+    simInit = true;
+    setTimeout(updateSim, 100);
+  }
+});
+observer.observe(slides[8], { attributes: true, attributeFilter: ['class'] });
+
+/* ═══ Quiz ═══ */
+function answer(btn, isCorrect, qNum) {
+  const block = btn.closest('.quiz-block');
+  block.querySelectorAll('.quiz-opt').forEach(b => b.disabled = true);
+  const fb = document.getElementById('fb' + qNum);
+  fb.classList.add('show');
+  if (isCorrect) {
+    btn.classList.add('correct');
+    fb.classList.add('ok');
+    fb.textContent = '✅ إجابة صحيحة! أحسنت يا مهندس';
+  } else {
+    btn.classList.add('wrong');
+    fb.classList.add('no');
+    fb.textContent = '❌ خطأ — الإجابة الصحيحة مظللة';
+    block.querySelectorAll('.quiz-opt').forEach(b => {
+      if (b.dataset.correct === '1') b.classList.add('correct');
+    });
+  }
+}
+
+render();
+</script>
+</body>
+</html>
